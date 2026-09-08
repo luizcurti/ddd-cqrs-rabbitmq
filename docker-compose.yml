@@ -1,0 +1,305 @@
+name: ddd-cqrs-rabbitmq
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17-alpine
+    container_name: ddd-cqrs-postgres
+    restart: unless-stopped
+    # Tuned for local/dev disks (notably Docker Desktop's virtualized
+    # filesystem on macOS, where fsync-per-commit measured 100+ seconds of
+    # checkpoint write stalls under load — see docs/README.md#load-testing).
+    # synchronous_commit=off trades "the last ~200ms of commits survive an OS
+    # crash" for a lot of throughput; fine for local dev, revisit on real
+    # block storage in production.
+    command:
+      - postgres
+      - -c
+      - synchronous_commit=off
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_wal_size=2GB
+    environment:
+      POSTGRES_DB: ddd_project
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ddd-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # RabbitMQ (broker for domain -> integration events)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ddd-cqrs-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # Management UI (guest/guest)
+    networks:
+      - ddd-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # API Server. No container_name and no published port here on purpose:
+  # `docker compose up --scale app=N` runs N of these behind nginx (below),
+  # which is what actually fixes 2,000-concurrent-connection latency — a
+  # single Node process is one event loop, and no amount of DB/broker tuning
+  # changes that. See docs/README.md#load-testing for the load-test numbers
+  # that led here.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ddd_project
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ddd_project.events
+      API_KEY: local-dev-key
+      CORS_ORIGIN: "*"
+      OTEL_SERVICE_NAME: ddd-cqrs-rabbitmq-app
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    expose:
+      - "3000" # HTTP API + GET /metrics — reached through nginx, not directly
+    networks:
+      - ddd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Load balancer in front of the app replicas — the "pod pool" for this
+  # single-machine docker-compose setup. Re-resolves the "app" hostname on
+  # every request (see docker/nginx/nginx.conf) so it picks up however many
+  # replicas `--scale app=N` is currently running, round-robin.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ddd-cqrs-nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "3000:80"
+    networks:
+      - ddd-network
+    depends_on:
+      - app
+
+  # Order read-model projector: consumes OrderPlaced integration events off
+  # RabbitMQ and updates the order_summaries read model (CQRS read side).
+  # No container_name/fixed port, same reason as app: `--scale consumer=N`
+  # runs N of these as RabbitMQ "competing consumers" — the queue hands each
+  # message to exactly one of them, round-robin, no coordination needed on
+  # our side. (Prometheus only scrapes whichever replica "consumer" resolves
+  # to for a given scrape, same known limitation as the scaled app service.)
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/consumer.js"]
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ddd_project
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ddd_project.events
+      CONSUMER_METRICS_PORT: 9091
+      OTEL_SERVICE_NAME: ddd-cqrs-rabbitmq-consumer
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    expose:
+      - "9091" # GET /metrics
+    networks:
+      - ddd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    # Overrides the Dockerfile's baked-in HEALTHCHECK, which curls
+    # localhost:3000/health — meaningless here since this entrypoint isn't
+    # an HTTP server on port 3000, only a metrics server on 9091. Without
+    # this override every consumer container reports permanently unhealthy
+    # despite working correctly (confirmed live: `docker compose ps` showed
+    # "unhealthy" with a wget ECONNREFUSED in the health log).
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/metrics"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # Outbox relay: polls outbox_messages (written atomically with the order/
+  # product write) and publishes pending rows to RabbitMQ. This is what
+  # closes the "event lost if the broker is down at publish time" gap.
+  # Scalable like consumer above — multiple replicas each claim a batch via
+  # the same countPending/findPending query, so at worst two instances race
+  # to relay the same row; the consumer's upsert is idempotent either way.
+  outbox-relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/outbox-relay.js"]
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ddd_project
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ddd_project.events
+      OUTBOX_POLL_INTERVAL_MS: 2000
+      OUTBOX_BATCH_SIZE: 200
+      OUTBOX_STALE_CLAIM_MS: 60000
+      OUTBOX_RELAY_METRICS_PORT: 9092
+      OTEL_SERVICE_NAME: ddd-cqrs-rabbitmq-outbox-relay
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+    expose:
+      - "9092" # GET /metrics
+    networks:
+      - ddd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    # Same override as consumer above, and for the same reason: the image's
+    # HEALTHCHECK targets port 3000, which nothing in this container listens
+    # on — only the metrics server on 9092.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9092/metrics"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # Docker gives a fresh named volume root:root ownership, but the jaeger
+  # image below runs as uid 10001 and can't write to it — this one-shot
+  # container fixes that before jaeger starts.
+  jaeger-volume-init:
+    image: busybox:1.36
+    command: ["sh", "-c", "chown -R 10001:0 /badger"]
+    volumes:
+      - jaeger_data:/badger
+    networks:
+      - ddd-network
+
+  # Jaeger (distributed tracing UI + OTLP collector, all-in-one).
+  # SPAN_STORAGE_TYPE=badger persists traces to disk instead of the
+  # all-in-one image's default in-memory store, which loses every trace on
+  # restart and grows unbounded under load (it hit 1.27GB during the load
+  # test in docs/README.md#load-testing). Badger is a local embedded store —
+  # good enough here without standing up Elasticsearch/Cassandra for what's
+  # a single-node deployment anyway.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: ddd-cqrs-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
+    volumes:
+      - jaeger_data:/badger
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318" # OTLP HTTP receiver
+    networks:
+      - ddd-network
+    depends_on:
+      jaeger-volume-init:
+        condition: service_completed_successfully
+
+  # Prometheus (scrapes /metrics off app, consumer, outbox-relay)
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ddd-cqrs-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - ddd-network
+
+  # Grafana (dashboards over Prometheus — datasource + a starter dashboard
+  # are auto-provisioned, so it's ready to look at without manual setup)
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: ddd-cqrs-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - ddd-network
+    depends_on:
+      - prometheus
+
+  # PgAdmin (Optional - Database Management UI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ddd-cqrs-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ddd-cqrs-rabbitmq.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - ddd-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  grafana_data:
+    driver: local
+  jaeger_data:
+    driver: local
+
+networks:
+  ddd-network:
+    driver: bridge

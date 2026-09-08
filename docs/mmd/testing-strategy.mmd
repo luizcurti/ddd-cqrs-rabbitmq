@@ -1,0 +1,21 @@
+flowchart TB
+    subgraph L1["1 · Unit — npm run test:unit"]
+        U["Domain entities, value objects,\nfactories, services, event dispatcher.\nNo I/O. Jest + SWC."]
+    end
+
+    subgraph L2["2 · Integration — npm run test:integration"]
+        I["Repository implementations against\na real Sequelize engine (SQLite in-memory).\nPersistence + mapping, not mocked."]
+    end
+
+    subgraph L3["3 · E2E — npm run test:e2e"]
+        E["Full HTTP stack via Supertest\n(Express -> Sequelize -> real PostgreSQL).\nEvery route, every 2xx/4xx path."]
+    end
+
+    subgraph L4["4 · Collection — npm run test:collection"]
+        C["Postman collection run with Newman\nagainst a live server + real PostgreSQL.\nBlack-box contract check, same happy/sad paths."]
+    end
+
+    L1 --> L2 --> L3 --> L4
+
+    classDef layer fill:#4C6EF5,color:#fff,stroke:none
+    class U,I,E,C layer

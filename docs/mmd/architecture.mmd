@@ -1,0 +1,74 @@
+flowchart TB
+    subgraph API["API Layer — src/api"]
+        direction LR
+        Idempotency["idempotency middleware\n(POST /orders, POST /products)"]
+        Routes["Express routes\ncustomer.routes.ts\nproduct.routes.ts\norder.routes.ts"]
+        ReadRoutes["order-read-model.routes.ts"]
+    end
+
+    subgraph Domain["Domain Layer — src/domain"]
+        direction LR
+        Entities["Entities\nCustomer · Product · Order · OrderItem"]
+        VO["Value Objects\nAddress"]
+        Services["Domain Services\nOrderService · ProductService"]
+        Factories["Factories\nCustomerFactory · OrderFactory"]
+        RepoInterfaces["Repository Interfaces\nCustomerRepositoryInterface\nProductRepositoryInterface\nOrderRepositoryInterface"]
+        Events["Domain Events\nEventDispatcher\nProductCreatedEvent · OrderPlacedEvent"]
+        ReadModelInterface["OrderReadModelRepositoryInterface"]
+        OutboxInterface["OutboxRepositoryInterface"]
+    end
+
+    subgraph Infra["Infrastructure Layer — src/infrastructure"]
+        direction LR
+        subgraph Persistence["Persistence"]
+            direction TB
+            Repos["Repository Implementations\n(Sequelize)"]
+            Models["Sequelize Models"]
+            DB[("PostgreSQL / SQLite")]
+            Outbox[("outbox_messages\nwritten in the SAME transaction\nas the order/product")]
+            OutboxRepo["OutboxRepository"]
+            ReadRepo["OrderReadModelRepository"]
+        end
+        subgraph Messaging["Messaging"]
+            direction TB
+            Relay["OutboxRelay\n(separate process — src/outbox-relay.ts)"]
+            MQ{{"RabbitMQ\ntopic exchange"}}
+            DLQ[("order-summary.order-placed.dlq")]
+            Consumer["OrderPlacedConsumer\n(separate process — src/consumer.ts)"]
+            EmailHandler["SendEmailWhenProductIsCreatedHandler"]
+        end
+    end
+
+    Idempotency -->|"claims Idempotency-Key,\nreplays stored response on retry"| Routes
+    Routes -->|"uses"| Entities
+    Routes -->|"uses"| Services
+    Routes -->|"depends on interface"| RepoInterfaces
+    Routes -->|"notifies (email only)"| Events
+    Events -->|"handled by"| EmailHandler
+    Routes -->|"passes outbox entries into"| RepoInterfaces
+    RepoInterfaces -.->|"implemented by"| Repos
+    Repos -->|"writes atomically with the aggregate"| Outbox
+    Repos --> Models
+
+    OutboxInterface -.->|"implemented by"| OutboxRepo
+    Relay -->|"reads pending rows via"| OutboxRepo
+    OutboxRepo --> Outbox
+    Relay -->|"publish"| MQ
+    MQ -->|"consume"| Consumer
+    Consumer -->|"nack on failure\n(dead-lettered)"| DLQ
+    Consumer -->|"depends on interface"| ReadModelInterface
+    ReadModelInterface -.->|"implemented by"| ReadRepo
+    ReadRepo --> Models
+    ReadRoutes -->|"depends on interface"| ReadModelInterface
+
+    Services --> Entities
+    Factories --> Entities
+    Models --> DB
+    Outbox --> DB
+
+    classDef api fill:#4C6EF5,color:#fff,stroke:none
+    classDef domain fill:#12B886,color:#fff,stroke:none
+    classDef infra fill:#F59F00,color:#111,stroke:none
+    class Routes,ReadRoutes,Idempotency api
+    class Entities,VO,Services,Factories,RepoInterfaces,Events,ReadModelInterface,OutboxInterface domain
+    class Repos,Models,DB,Outbox,OutboxRepo,Relay,MQ,DLQ,Consumer,ReadRepo,EmailHandler infra

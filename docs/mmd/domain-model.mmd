@@ -1,0 +1,79 @@
+classDiagram
+    class Customer {
+        -string _id
+        -string _name
+        -Address _address
+        -boolean _active
+        -number _rewardPoints
+        +id string
+        +name string
+        +address Address
+        +rewardPoints number
+        +changeName(name)
+        +changeAddress(address)
+        +isActive() boolean
+        +activate()
+        +deactivate()
+        +addRewardPoints(points)
+    }
+
+    class Address {
+        -string _street
+        -number _number
+        -string _zip
+        -string _city
+        +street string
+        +number number
+        +zip string
+        +city string
+        +toString() string
+    }
+
+    class Product {
+        -string _id
+        -string _name
+        -number _price
+        +id string
+        +name string
+        +price number
+        +changeName(name)
+        +changePrice(price)
+    }
+
+    class Order {
+        -string _id
+        -string _customerId
+        -OrderItem[] _items
+        +id string
+        +customerId string
+        +items OrderItem[]
+        +total() number
+    }
+
+    class OrderItem {
+        -string _id
+        -string _productId
+        -string _name
+        -number _price
+        -number _quantity
+        +id string
+        +name string
+        +productId string
+        +quantity number
+        +price number
+        +unitPrice number
+    }
+
+    class OrderService {
+        <<domain service>>
+        +rewardPointsFor(order)$ number
+        +placeOrder(customer, items)$ Order
+        +total(orders)$ number
+    }
+
+    Customer "1" o-- "0..1" Address : has
+    Order "1" *-- "1..*" OrderItem : contains
+    Order "*" --> "1" Customer : belongs to
+    OrderItem "*" --> "1" Product : references
+    OrderService ..> Order : creates
+    OrderService ..> Customer : grants reward points

@@ -1,0 +1,33 @@
+flowchart TD
+    Start(["push / pull_request to main"]) --> Checkout["Checkout code"]
+    Checkout --> Setup["Setup Node.js 24.x"]
+    Setup --> Install["npm ci"]
+    Install --> Audit["npm audit --audit-level high\n(continue-on-error)"]
+    Audit --> Format["npm run format:check"]
+    Format --> Lint["npm run lint"]
+    Lint --> Typecheck["npm run typecheck"]
+    Typecheck --> Unit["npm run test:unit"]
+    Unit --> Integration["npm run test:integration"]
+    Integration --> Coverage["npm run test:coverage\n(90% threshold gate)"]
+    Coverage --> Codecov["Upload coverage to Codecov\n(push events only)"]
+    Codecov --> E2E["npm run test:e2e:run\n(against services.postgres)"]
+    E2E --> Collection["npm run test:collection:run\n(live server + services.postgres)"]
+    Collection --> Build["npm run build"]
+    Build --> JobGate(["test job green"])
+
+    JobGate --> DockerBuild["docker build\n(job: docker, needs: test)"]
+    DockerBuild --> ComposeUp["docker compose up -d --build\n(postgres + rabbitmq + app + nginx + consumer + outbox-relay + pgadmin)"]
+    ComposeUp --> Health["poll GET /health until ready"]
+    Health --> ContainerCollection["Newman run against\nthe containerized app"]
+    ContainerCollection --> Teardown["docker compose down -v"]
+    Teardown --> Done(["✅ CI green"])
+
+    Postgres[("services: postgres:17-alpine\navailable for the whole test job")] -.-> E2E
+    Postgres -.-> Collection
+
+    classDef step fill:#4C6EF5,color:#fff,stroke:none
+    classDef gate fill:#F59F00,color:#111,stroke:none
+    classDef terminal fill:#12B886,color:#fff,stroke:none
+    class Checkout,Setup,Install,Audit,Format,Lint,Unit,Integration,Codecov,E2E,Collection,Build,DockerBuild,ComposeUp,Health,ContainerCollection,Teardown step
+    class Typecheck,Coverage gate
+    class Start,JobGate,Done terminal

@@ -1,0 +1,143 @@
+name: DDD CQRS RabbitMQ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  test:
+    name: Lint, typecheck & test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: ddd_project
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit
+        run: npm audit --audit-level high
+        continue-on-error: true
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: github.event_name == 'push'
+        with:
+          file: ./coverage/lcov.info
+
+      - name: Run E2E tests (real PostgreSQL)
+        run: npm run test:e2e:run
+        env:
+          NODE_ENV: e2e
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ddd_project
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          API_KEY: local-dev-key
+
+      - name: Run Postman collection (real PostgreSQL, live server)
+        run: npm run test:collection:run
+        env:
+          NODE_ENV: development
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ddd_project
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          API_KEY: local-dev-key
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker build & validation
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build Docker image
+        run: docker build -t ddd-cqrs-rabbitmq:ci .
+
+      - name: Start the application stack via Docker Compose
+        # Excludes jaeger/prometheus/grafana — they add ~800MB of image pulls
+        # and nothing this job checks (health + Postman) exercises them.
+        # app is unscaled (1 replica) here — nginx fronts it either way, so
+        # this also validates the load-balanced path with a trivial case.
+        run: docker compose up -d --build postgres rabbitmq app nginx consumer outbox-relay pgadmin
+
+      - name: Wait for app health check
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "App is healthy after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not become healthy in time." >&2
+          docker compose logs
+          exit 1
+
+      - name: Run Postman collection against the containerized app
+        run: npx --yes newman@6.2.2 run ddd-cqrs-rabbitmq.postman_collection.json --env-var "baseUrl=http://localhost:3000" --env-var "apiKey=local-dev-key"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down containers
+        if: always()
+        run: docker compose down -v
