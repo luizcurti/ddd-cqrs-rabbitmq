@@ -1,0 +1,54 @@
+flowchart LR
+    subgraph Host["Docker host"]
+        subgraph Network["ddd-network (bridge)"]
+            subgraph AppGroup["Application"]
+                direction TB
+                Nginx["nginx container\nreverse proxy :3000 -> :80\nre-resolves the app hostname every request"]
+                App["app container x N\n(docker compose up --scale app=N)\nnode:24-alpine Express :3000\n(+ GET /metrics) — one event loop each"]
+                Consumer["consumer container\nOrderPlaced read-model projector\n:9091 /metrics"]
+                Relay["outbox-relay container\npolls outbox_messages\n:9092 /metrics"]
+            end
+            subgraph Data["Data & broker"]
+                direction TB
+                PG[("postgres container\npostgres:17-alpine\n:5432")]
+                MQ{{"rabbitmq container\nrabbitmq:3.13-management\n:5672 (AMQP) / :15672 (UI)"}}
+            end
+            subgraph Observability["Observability"]
+                direction TB
+                Jaeger["jaeger container\n:16686 (UI) / :4318 (OTLP)"]
+                Prometheus["prometheus container\n:9090"]
+                Grafana["grafana container\n:3001 -> :3000"]
+            end
+            PgAdmin["pgadmin container\ndpage/pgadmin4\n:8080"]
+        end
+        Vol[("postgres_data volume")]
+    end
+
+    Client["Client / browser"] -->|":3000"| Nginx
+    Nginx -->|"round-robin"| App
+    Admin["Developer"] -->|":8080 / :15672 / :16686 / :3001"| PgAdmin
+
+    App -->|"Sequelize\n(writes order + outbox row atomically)"| PG
+    Relay -->|"Sequelize\n(polls outbox_messages)"| PG
+    Relay -->|"amqplib publish\n(propagates trace context)"| MQ
+    MQ -->|"amqplib consume"| Consumer
+    Consumer -->|"Sequelize"| PG
+    PgAdmin -->|"admin UI"| PG
+    PG --- Vol
+
+    App -.->|"OTLP traces"| Jaeger
+    Consumer -.->|"OTLP traces"| Jaeger
+    Relay -.->|"OTLP traces"| Jaeger
+    Prometheus -.->|"scrapes /metrics"| App
+    Prometheus -.->|"scrapes /metrics"| Consumer
+    Prometheus -.->|"scrapes /metrics"| Relay
+    Grafana -->|"PromQL queries"| Prometheus
+
+    classDef container fill:#4C6EF5,color:#fff,stroke:none
+    classDef db fill:#F59F00,color:#111,stroke:none
+    classDef actor fill:#12B886,color:#fff,stroke:none
+    classDef obs fill:#7048E8,color:#fff,stroke:none
+    class Nginx,App,Consumer,Relay,PgAdmin container
+    class PG,MQ,Vol db
+    class Client,Admin actor
+    class Jaeger,Prometheus,Grafana obs

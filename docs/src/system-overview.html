@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+        }
+
+        svg text {
+            font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <svg id="canvas" width="1700" height="1600" viewBox="0 0 1700 1600" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8"
+                orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#555" />
+            </marker>
+            <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#8c4fff" />
+            </marker>
+            <marker id="arrowDashAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c98a0f" />
+            </marker>
+        </defs>
+
+        <!-- ============ ICON DEFINITIONS ============ -->
+        <defs>
+            <g id="icon-user">
+                <circle cx="12" cy="8" r="4" stroke="white" stroke-width="1.8" fill="none" />
+                <path d="M4,21 C4,15.5 8,13 12,13 C16,13 20,15.5 20,21" stroke="white" stroke-width="1.8" fill="none"
+                    stroke-linecap="round" />
+            </g>
+            <g id="icon-shield">
+                <path d="M12,3 L20,6.5 V11.5 C20,16.5 16.5,20 12,21.5 C7.5,20 4,16.5 4,11.5 V6.5 Z" stroke="white"
+                    stroke-width="1.8" fill="none" stroke-linejoin="round" />
+                <path d="M8.5,12 L11,14.5 L16,9" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </g>
+            <g id="icon-server">
+                <rect x="4" y="4" width="16" height="6" rx="1.4" stroke="white" stroke-width="1.7" fill="none" />
+                <rect x="4" y="14" width="16" height="6" rx="1.4" stroke="white" stroke-width="1.7" fill="none" />
+                <circle cx="7.3" cy="7" r="1" fill="white" />
+                <circle cx="7.3" cy="17" r="1" fill="white" />
+            </g>
+            <g id="icon-db">
+                <ellipse cx="12" cy="6" rx="7.5" ry="3" stroke="white" stroke-width="1.7" fill="none" />
+                <path d="M4.5,6 V18 C4.5,19.7 7.9,21 12,21 C16.1,21 19.5,19.7 19.5,18 V6" stroke="white"
+                    stroke-width="1.7" fill="none" />
+                <path d="M4.5,12 C4.5,13.7 7.9,15 12,15 C16.1,15 19.5,13.7 19.5,12" stroke="white" stroke-width="1.7"
+                    fill="none" />
+            </g>
+            <g id="icon-chart">
+                <path d="M4,20 H20" stroke="white" stroke-width="1.7" stroke-linecap="round" />
+                <rect x="6" y="13" width="3.2" height="7" rx="0.6" fill="white" />
+                <rect x="10.4" y="8" width="3.2" height="12" rx="0.6" fill="white" />
+                <rect x="14.8" y="4.5" width="3.2" height="15.5" rx="0.6" fill="white" />
+            </g>
+            <g id="icon-check">
+                <circle cx="12" cy="12" r="8.5" stroke="white" stroke-width="1.7" fill="none" />
+                <path d="M7.5,12.3 L10.3,15 L16.5,8.8" stroke="white" stroke-width="1.8" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </g>
+            <g id="icon-warn">
+                <path d="M12,3.5 L21,19.5 H3 Z" stroke="white" stroke-width="1.7" fill="none" stroke-linejoin="round" />
+                <path d="M12,10 V14.2" stroke="white" stroke-width="1.8" stroke-linecap="round" />
+                <circle cx="12" cy="16.8" r="1" fill="white" />
+            </g>
+            <g id="icon-mesh">
+                <circle cx="6" cy="6" r="2.3" stroke="white" stroke-width="1.5" fill="none" />
+                <circle cx="18" cy="6" r="2.3" stroke="white" stroke-width="1.5" fill="none" />
+                <circle cx="12" cy="18" r="2.3" stroke="white" stroke-width="1.5" fill="none" />
+                <path d="M8,6 H16 M7,8 L11,16 M17,8 L13,16" stroke="white" stroke-width="1.4" />
+            </g>
+            <g id="icon-broadcast">
+                <circle cx="12" cy="18" r="1.7" fill="white" />
+                <path d="M8,14 A6,6 0 0 1 16,14" stroke="white" stroke-width="1.6" fill="none" stroke-linecap="round" />
+                <path d="M5,10.5 A10,10 0 0 1 19,10.5" stroke="white" stroke-width="1.6" fill="none"
+                    stroke-linecap="round" />
+            </g>
+        </defs>
+
+        <!-- ============ MAIN SPINE (synchronous write path) ============ -->
+
+        <!-- Client -->
+        <rect x="660" y="40" width="380" height="100" rx="16" fill="#f1f1ef" stroke="#5a6b7a" stroke-width="1.5" />
+        <rect x="686" y="60" width="60" height="60" rx="12" fill="#5a6b7a" />
+        <use href="#icon-user" x="694" y="68" width="44" height="44" />
+        <text x="768" y="98" font-size="23" font-weight="600" fill="#222">HTTP Client</text>
+
+        <!-- Edge: nginx + Express app -->
+        <rect x="560" y="230" width="580" height="140" rx="16" fill="#eef5fc" stroke="#2e73b8" stroke-width="1.5" />
+        <rect x="588" y="260" width="60" height="60" rx="12" fill="#2e73b8" />
+        <use href="#icon-shield" x="596" y="268" width="44" height="44" />
+        <text x="670" y="288" font-size="23" font-weight="600" fill="#1c4c7a">Edge — nginx + Express (app)</text>
+        <text x="670" y="313" font-size="15.5" fill="#3a6690">X-API-Key auth · CORS · Helmet · per-IP rate limit</text>
+        <text x="670" y="335" font-size="15.5" fill="#3a6690">Idempotency-Key claim on POST /orders · POST /products</text>
+
+        <!-- Rejected-early callout -->
+        <rect x="1210" y="140" width="430" height="120" rx="12" fill="#fdf3df" stroke="#c98a0f" stroke-width="1.3"
+            stroke-dasharray="4,4" />
+        <rect x="1230" y="160" width="34" height="34" rx="8" fill="#c98a0f" />
+        <use href="#icon-warn" x="1235" y="165" width="24" height="24" />
+        <text x="1276" y="178" font-size="15" font-weight="600" fill="#7a5308">Rejected before it runs</text>
+        <text x="1276" y="199" font-size="13" fill="#555">missing/invalid X-API-Key → 401</text>
+        <text x="1276" y="217" font-size="13" fill="#555">body validation fails → 400</text>
+        <text x="1276" y="235" font-size="13" fill="#555">Idempotency-Key already in flight → 409</text>
+        <path d="M1210,200 H1160 V300 H1140" stroke="#c98a0f" stroke-width="1.4" stroke-dasharray="3,4" fill="none"
+            marker-end="url(#arrowDashAmber)" />
+
+        <!-- Request / Response example -->
+        <rect x="1210" y="300" width="450" height="190" rx="10" fill="#f5f2ff" stroke="#8c4fff" stroke-width="1.3"
+            stroke-dasharray="4,4" />
+        <text x="1230" y="328" font-size="16" font-weight="600" fill="#5a35a8">Request</text>
+        <text x="1230" y="350" font-size="14" fill="#333">POST /orders</text>
+        <text x="1230" y="369" font-size="14" fill="#333">{ customerId, items }</text>
+        <text x="1230" y="388" font-size="13" fill="#555">Idempotency-Key: &lt;client-generated&gt;</text>
+        <text x="1230" y="418" font-size="16" font-weight="600" fill="#5a35a8">Response (immediate)</text>
+        <text x="1230" y="440" font-size="14" fill="#333">201 Created</text>
+        <text x="1230" y="459" font-size="14" fill="#333">{ id, customerId, total, items }</text>
+        <path d="M1210,395 H1140" stroke="#8c4fff" stroke-width="1.4" stroke-dasharray="3,4" fill="none"
+            marker-end="url(#arrowDash)" />
+
+        <!-- Route handler + OrderService -->
+        <rect x="560" y="460" width="580" height="140" rx="16" fill="#fdeee0" stroke="#ec7211" stroke-width="1.5" />
+        <rect x="588" y="490" width="60" height="60" rx="12" fill="#ec7211" />
+        <use href="#icon-server" x="596" y="498" width="44" height="44" />
+        <text x="670" y="518" font-size="23" font-weight="600" fill="#a85510">Route handler + OrderService</text>
+        <text x="670" y="543" font-size="15.5" fill="#c56313">validates body → loads Customer → places Order</text>
+        <text x="670" y="565" font-size="15.5" fill="#c56313">rewardPointsFor(order) = floor(total / 2)</text>
+
+        <!-- PostgreSQL transaction -->
+        <rect x="560" y="690" width="580" height="150" rx="16" fill="#f5f0ff" stroke="#8c4fff" stroke-width="1.5" />
+        <rect x="588" y="720" width="60" height="60" rx="12" fill="#8c4fff" />
+        <use href="#icon-db" x="596" y="728" width="44" height="44" />
+        <text x="670" y="748" font-size="23" font-weight="600" fill="#5a35a8">PostgreSQL — one DB transaction</text>
+        <text x="670" y="773" font-size="15.5" fill="#7856c9">INSERT order + items · INSERT outbox_messages (pending)</text>
+        <text x="670" y="795" font-size="15.5" fill="#7856c9">UPDATE customer SET reward_points += ? (atomic)</text>
+        <text x="670" y="817" font-size="13.5" fill="#8a76c9">commits together, or neither write happens</text>
+
+        <!-- Response returned -->
+        <rect x="610" y="940" width="480" height="110" rx="20" fill="#e6f4ea" stroke="#1d8a4c" stroke-width="1.5" />
+        <rect x="636" y="964" width="60" height="60" rx="12" fill="#1d8a4c" />
+        <use href="#icon-check" x="644" y="972" width="44" height="44" />
+        <text x="718" y="990" font-size="22" font-weight="600" fill="#12572f">201 Created — response returned</text>
+        <text x="718" y="1015" font-size="14.5" fill="#2f7a4d">idempotency middleware stores it for replay on retry</text>
+
+        <!-- spine arrows -->
+        <line x1="850" y1="140" x2="850" y2="230" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <line x1="850" y1="370" x2="850" y2="460" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <line x1="850" y1="600" x2="850" y2="690" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <line x1="850" y1="840" x2="850" y2="940" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+
+        <!-- ============ ASYNCHRONOUS PIPELINE (separate processes) ============ -->
+
+        <rect x="1180" y="650" width="500" height="760" rx="20" fill="none" stroke="#999" stroke-width="1.5"
+            stroke-dasharray="6,5" />
+        <text x="1205" y="678" font-size="13.5" font-weight="600" fill="#777" letter-spacing="0.5">ASYNCHRONOUS —
+            SEPARATE PROCESSES, AFTER THE RESPONSE</text>
+
+        <!-- OutboxRelay -->
+        <rect x="1210" y="700" width="440" height="130" rx="16" fill="#fdeee0" stroke="#ec7211" stroke-width="1.5" />
+        <rect x="1234" y="726" width="54" height="54" rx="11" fill="#ec7211" />
+        <use href="#icon-server" x="1241" y="733" width="40" height="40" />
+        <text x="1304" y="750" font-size="20" font-weight="600" fill="#a85510">OutboxRelay process</text>
+        <text x="1304" y="773" font-size="14" fill="#c56313">polls outbox_messages every 2s</text>
+        <text x="1304" y="793" font-size="14" fill="#c56313">atomic claim (pending → sending) before publish</text>
+
+        <!-- RabbitMQ -->
+        <rect x="1210" y="860" width="440" height="110" rx="16" fill="#e6f7f5" stroke="#0e9488" stroke-width="1.5" />
+        <rect x="1234" y="882" width="54" height="54" rx="11" fill="#0e9488" />
+        <use href="#icon-broadcast" x="1241" y="889" width="40" height="40" />
+        <text x="1304" y="906" font-size="20" font-weight="600" fill="#0a6b62">RabbitMQ — topic exchange</text>
+        <text x="1304" y="930" font-size="14" fill="#0e8c80">routing key: order.placed</text>
+
+        <!-- Consumer -->
+        <rect x="1210" y="1000" width="440" height="130" rx="16" fill="#fdeee0" stroke="#ec7211" stroke-width="1.5" />
+        <rect x="1234" y="1026" width="54" height="54" rx="11" fill="#ec7211" />
+        <use href="#icon-server" x="1241" y="1033" width="40" height="40" />
+        <text x="1304" y="1050" font-size="20" font-weight="600" fill="#a85510">OrderPlacedConsumer process</text>
+        <text x="1304" y="1073" font-size="14" fill="#c56313">projects order_summaries (CQRS read side)</text>
+        <text x="1304" y="1093" font-size="14" fill="#c56313">acks only after the read model is updated</text>
+
+        <!-- Read model -->
+        <rect x="1210" y="1160" width="210" height="120" rx="14" fill="#f5f0ff" stroke="#8c4fff" stroke-width="1.5" />
+        <rect x="1228" y="1180" width="46" height="46" rx="10" fill="#8c4fff" />
+        <use href="#icon-db" x="1234" y="1186" width="34" height="34" />
+        <text x="1288" y="1200" font-size="16.5" font-weight="600" fill="#5a35a8">order_summaries</text>
+        <text x="1228" y="1258" font-size="13" fill="#7856c9">GET /read-models/orders</text>
+
+        <!-- DLQ -->
+        <rect x="1440" y="1160" width="220" height="120" rx="14" fill="#fdf3df" stroke="#c98a0f" stroke-width="1.5" />
+        <rect x="1458" y="1180" width="46" height="46" rx="10" fill="#c98a0f" />
+        <use href="#icon-warn" x="1464" y="1186" width="34" height="34" />
+        <text x="1518" y="1200" font-size="16.5" font-weight="600" fill="#7a5308">Dead-letter queue</text>
+        <text x="1458" y="1258" font-size="13" fill="#8a7a2b">after retries exhausted</text>
+
+        <!-- async arrows -->
+        <line x1="1140" y1="765" x2="1210" y2="765" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <text x="1145" y="752" font-size="13.5" fill="#555">reads pending rows</text>
+
+        <line x1="1430" y1="830" x2="1430" y2="860" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <text x="1443" y="850" font-size="13.5" fill="#555">publish</text>
+
+        <line x1="1430" y1="970" x2="1430" y2="1000" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)" />
+        <text x="1443" y="990" font-size="13.5" fill="#555">consume</text>
+
+        <path d="M1350,1130 L1315,1160" stroke="#555" stroke-width="1.8" fill="none" marker-end="url(#arrow)" />
+        <path d="M1510,1130 L1545,1160" stroke="#c98a0f" stroke-width="1.8" fill="none"
+            marker-end="url(#arrowDashAmber)" />
+        <text x="1382" y="1150" font-size="12.5" fill="#555">success</text>
+        <text x="1408" y="1120" font-size="12.5" fill="#7a5308">nack → retry (TTL) → DLQ</text>
+
+        <path d="M1210,1050 C1197,1050 1197,915 1210,915" stroke="#c98a0f" stroke-width="1.4"
+            stroke-dasharray="3,4" fill="none" marker-end="url(#arrowDashAmber)" />
+        <text x="1063" y="985" font-size="12.5" fill="#7a5308" transform="rotate(-90 1098,985)">retry bounces
+            back before DLQ</text>
+
+        <!-- ============ LEGEND (empty band below the response box) ============ -->
+        <rect x="40" y="1080" width="1100" height="130" rx="12" fill="#fffdf2" stroke="#cdbf7a" stroke-width="1.5"
+            stroke-dasharray="5,4" />
+        <text x="62" y="1110" font-size="20" font-weight="600" fill="#8a7a2b">Legend</text>
+
+        <rect x="62" y="1126" width="30" height="30" rx="7" fill="#ec7211" />
+        <use href="#icon-server" x="67" y="1131" width="20" height="20" />
+        <text x="102" y="1146" font-size="15" fill="#222">Express / Node.js process</text>
+
+        <rect x="360" y="1126" width="30" height="30" rx="7" fill="#8c4fff" />
+        <use href="#icon-db" x="365" y="1131" width="20" height="20" />
+        <text x="400" y="1146" font-size="15" fill="#222">PostgreSQL data store</text>
+
+        <rect x="640" y="1126" width="30" height="30" rx="7" fill="#0e9488" />
+        <use href="#icon-broadcast" x="645" y="1131" width="20" height="20" />
+        <text x="680" y="1146" font-size="15" fill="#222">RabbitMQ (topic exchange)</text>
+
+        <rect x="940" y="1126" width="30" height="30" rx="7" fill="#2e73b8" />
+        <use href="#icon-shield" x="945" y="1131" width="20" height="20" />
+        <text x="980" y="1146" font-size="15" fill="#222">Auth · idempotency</text>
+
+        <rect x="62" y="1172" width="30" height="30" rx="7" fill="#1d8a4c" />
+        <use href="#icon-check" x="67" y="1177" width="20" height="20" />
+        <text x="102" y="1192" font-size="15" fill="#222">Success outcome</text>
+
+        <rect x="360" y="1172" width="30" height="30" rx="7" fill="#c98a0f" />
+        <use href="#icon-warn" x="365" y="1177" width="20" height="20" />
+        <text x="400" y="1192" font-size="15" fill="#222">Rejected / dead-lettered</text>
+
+        <rect x="640" y="1172" width="30" height="30" rx="7" fill="#465a69" />
+        <use href="#icon-mesh" x="645" y="1177" width="20" height="20" />
+        <text x="680" y="1192" font-size="15" fill="#222">Async — separate OS process</text>
+
+        <rect x="940" y="1172" width="30" height="30" rx="7" fill="#4a7fd6" />
+        <use href="#icon-chart" x="945" y="1177" width="20" height="20" />
+        <text x="980" y="1192" font-size="15" fill="#222">Prometheus / Jaeger</text>
+
+        <!-- ============ OBSERVABILITY BAND ============ -->
+        <rect x="40" y="1440" width="1620" height="110" rx="10" fill="#eef5fc" stroke="#4a7fd6" stroke-width="1.5"
+            stroke-dasharray="5,4" />
+        <text x="62" y="1470" font-size="18" font-weight="600" fill="#2e5fa3">Observability — every process</text>
+
+        <rect x="62" y="1484" width="34" height="34" rx="8" fill="#2e73b8" />
+        <use href="#icon-chart" x="67" y="1489" width="24" height="24" />
+        <text x="108" y="1502" font-size="15" fill="#222">GET /metrics (prom-client) — app, consumer, outbox-relay each expose their own</text>
+        <text x="108" y="1522" font-size="13" fill="#555">scraped by Prometheus · a starter Grafana dashboard is auto-provisioned</text>
+
+        <rect x="880" y="1484" width="34" height="34" rx="8" fill="#465a69" />
+        <use href="#icon-mesh" x="885" y="1489" width="24" height="24" />
+        <text x="926" y="1502" font-size="15" fill="#222">OpenTelemetry traces → Jaeger</text>
+        <text x="926" y="1522" font-size="13" fill="#555">trace context is bridged across the outbox, so one trace spans all three processes</text>
+
+        <!-- footer -->
+        <text x="40" y="1590" font-size="14" fill="#999">High-level view — the big pieces and how a request
+            flows between them. See docs/ for detailed diagrams.</text>
+
+    </svg>
+</body>
+
+</html>

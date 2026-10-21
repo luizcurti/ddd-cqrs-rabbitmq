@@ -1,0 +1,31 @@
+node_modules
+.vscode
+dist
+.qodo
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Test coverage
+coverage
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite
+# Terraform (infra/, bootstrap/)
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+infra/ci_backend.tf
+infra/*.log

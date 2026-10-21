@@ -1,0 +1,59 @@
+sequenceDiagram
+    actor Client
+    participant Idem as idempotency middleware
+    participant Route as POST /orders
+    participant CustomerRepo as CustomerRepository
+    participant OrderService
+    participant OrderRepo as OrderRepository
+    participant DB as Database
+
+    Client->>Idem: POST /orders { customerId, items }<br/>Idempotency-Key header
+    Idem->>DB: try claim key (INSERT, unique constraint)
+
+    alt key already completed
+        DB-->>Idem: existing row
+        Idem-->>Client: replay stored response
+    else key in flight
+        DB-->>Idem: unique violation, still processing
+        Idem-->>Client: 409
+    else key claimed
+        Idem->>Route: forward request
+        Route->>Route: validate body (customerId, items shape)
+
+        alt validation fails
+            Route-->>Client: 400 { error }
+        else validation passes
+            Route->>CustomerRepo: find(customerId)
+            CustomerRepo->>DB: SELECT customer
+            alt customer not found
+                DB-->>CustomerRepo: not found
+                CustomerRepo-->>Route: throws "Customer not found"
+                Route-->>Client: 400 { error: "Customer not found" }
+            else customer found
+                DB-->>CustomerRepo: customer row
+                CustomerRepo-->>Route: Customer
+
+                Route->>OrderService: placeOrder(customer, items)
+                OrderService->>OrderService: new Order(uuid, customer.id, items)
+                Note over OrderService: rewardPoints = rewardPointsFor(order)<br/>= floor(order.total() / 2)<br/>customer.addRewardPoints(rewardPoints)
+                OrderService-->>Route: Order
+
+                Route->>Route: build OrderPlaced outbox entry<br/>(routingKey, correlationId, traceContext, payload)
+                Route->>DB: BEGIN TRANSACTION
+                rect rgb(240, 248, 255)
+                    Note over Route,DB: single DB transaction — commits or rolls back together
+                    Route->>OrderRepo: create(order, [outboxEntry], transaction)
+                    OrderRepo->>DB: INSERT order + items
+                    OrderRepo->>DB: INSERT outbox_messages row (status = pending)
+                    Route->>CustomerRepo: incrementRewardPoints(customer.id, rewardPoints, transaction)
+                    Note over CustomerRepo,DB: atomic SET reward_points = reward_points + ? —<br/>not a read-modify-write, so concurrent orders<br/>for the same customer can't lose each other's points
+                    CustomerRepo->>DB: UPDATE customer SET reward_points = reward_points + ?
+                end
+                DB-->>Route: COMMIT
+
+                Route-->>Client: 201 { order }<br/>idempotency middleware stores the response
+
+                Note over DB: Later, asynchronously (separate processes):<br/>OutboxRelay polls outbox_messages and publishes<br/>routing key order.placed to RabbitMQ. OrderPlacedConsumer<br/>consumes it and projects order_summaries (CQRS read model).<br/>A processing failure is nack'd to a dead-letter queue<br/>instead of being dropped.
+            end
+        end
+    end
