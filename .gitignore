@@ -22,3 +22,10 @@ npm-debug.log*
 # Database
 *.db
 *.sqlite
+# Terraform (infra/, bootstrap/)
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+infra/ci_backend.tf
+infra/*.log

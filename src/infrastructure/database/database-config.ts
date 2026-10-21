@@ -44,6 +44,13 @@ export class DatabaseConfig {
         database: process.env.DB_NAME || "ddd_project",
         username: process.env.DB_USER || "postgres",
         password: process.env.DB_PASSWORD || "postgres",
+        // DB_SSL=true encrypts the connection without verifying the server
+        // certificate (no CA bundle shipped in the image) — for a managed
+        // database reached inside a private network, e.g. RDS, which requires
+        // TLS by default. Unset for the local docker-compose Postgres.
+        ...(process.env.DB_SSL === "true" && {
+          dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+        }),
         logging:
           process.env.NODE_ENV === "development" ? (sql: string) => logger.debug(sql) : false,
       });

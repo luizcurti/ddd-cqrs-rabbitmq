@@ -153,6 +153,18 @@ docker compose down
 npm run docker:up:scaled
 ```
 
+## ☁️ Deployment (AWS)
+
+Every push to `main` deploys the stack to AWS once CI passes: CloudFront → ALB (in place of nginx) → the API on ECS Fargate, the `consumer` and `outbox-relay` as Fargate services, RabbitMQ as a Fargate service, and RDS PostgreSQL 17, all in Terraform ([`infra/`](infra)). GitHub Actions authenticates with OIDC (no AWS keys in GitHub), and [`scripts/smoke-test.sh`](scripts/smoke-test.sh) checks the live stack after each deploy: the Postman collection, then an order followed through the outbox relay, RabbitMQ and the consumer into the CQRS read model.
+
+```bash
+scripts/bootstrap.sh                                                                         # once: state bucket, deploy role, GitHub environment
+gh workflow run ci.yml --repo luizcurti/ddd-cqrs-rabbitmq --ref main                         # deploy
+gh workflow run destroy.yml --repo luizcurti/ddd-cqrs-rabbitmq --ref main -f confirm=destroy # tear down
+```
+
+Details, architecture and costs: [docs/deployment.md](docs/deployment.md).
+
 ## 📌 Prerequisites
 
 * **Node.js** (version >= 24.x)

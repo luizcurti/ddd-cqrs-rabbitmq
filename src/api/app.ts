@@ -21,7 +21,9 @@ const app = express();
 // below into one shared bucket for all clients combined, and would let one
 // noisy client 429 everyone else. `1` (not `true`) matters: `true` trusts
 // every hop, including one a client could forge in its own X-Forwarded-For.
-app.set("trust proxy", 1);
+// TRUST_PROXY overrides the hop count for other topologies (the AWS deployment
+// has two: CloudFront, then the ALB — see docs/deployment.md).
+app.set("trust proxy", parseInt(process.env.TRUST_PROXY || "1"));
 
 // Must run before apiKeyAuth below: a browser's CORS preflight (OPTIONS) is
 // sent without credentials, so if auth ran first every cross-origin request
